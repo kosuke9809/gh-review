@@ -4,3 +4,4 @@ docs
 gh-review
 *.exe
 .worktrees/
+CLAUDE.md
