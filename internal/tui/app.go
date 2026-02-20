@@ -29,6 +29,7 @@ type tickMsg time.Time
 // AppModel is the root bubbletea model.
 type AppModel struct {
 	activeTab   model.Tab
+	filter      model.PRFilter
 	prsTab      prsTabModel
 	detailTab   detailTabModel
 	diffTab     diffTabModel
@@ -78,7 +79,7 @@ func tickCmd() tea.Cmd {
 func (m AppModel) fetchCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		ghPRs, err := github.FetchPRs(ctx, m.ghClient, m.repoOwner, m.repoRepo, m.currentUser)
+		ghPRs, err := github.FetchPRs(ctx, m.ghClient, m.repoOwner, m.repoRepo, m.currentUser, m.filter)
 		if err != nil {
 			return fetchedMsg{err: err}
 		}
@@ -160,6 +161,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeTab = model.TabDetail
 		case "3":
 			m.activeTab = model.TabDiff
+		case "f":
+			m.filter = m.filter.Next()
+			m.loading = true
+			return m, m.fetchCmd()
 		case "r":
 			m.loading = true
 			return m, m.fetchCmd()
@@ -248,7 +253,8 @@ func (m AppModel) renderHeader() string {
 	}
 	title := lipgloss.NewStyle().Bold(true).Render("gh-review — " + m.repoName)
 	tabRow := lipgloss.JoinHorizontal(lipgloss.Left, parts...)
-	return lipgloss.JoinHorizontal(lipgloss.Left, title+"  ", tabRow)
+	filterLabel := lipgloss.NewStyle().Foreground(colorYellow).Render("[f] " + m.filter.Label())
+	return lipgloss.JoinHorizontal(lipgloss.Left, title+"  ", tabRow, "  ", filterLabel)
 }
 
 func (m AppModel) renderBody() string {
@@ -275,7 +281,7 @@ func (m AppModel) renderStatusBar() string {
 	if m.err != nil {
 		syncStr = styleStatusBar.Copy().Foreground(colorRed).Render("Error: " + m.err.Error())
 	}
-	help := "[Enter]worktree  [d]iff  [o]open  [r]efresh  [q]quit"
+	help := "[Enter]worktree  [d]iff  [o]open  [f]filter  [r]efresh  [q]quit"
 	rightW := len(syncStr) + 1
 	if rightW > m.width {
 		rightW = m.width

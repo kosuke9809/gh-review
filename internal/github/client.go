@@ -37,10 +37,18 @@ func CurrentUser(ctx context.Context, client *gogithub.Client) (string, error) {
 	return user.GetLogin(), nil
 }
 
-// FetchPRs fetches open PRs where the current user is a requested reviewer,
-// using GitHub Search API to reliably handle both individual and team review requests.
-func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string) ([]*gogithub.PullRequest, error) {
-	query := fmt.Sprintf("is:open is:pr review-requested:%s repo:%s/%s", currentUser, owner, repo)
+// FetchPRs fetches open PRs according to the given filter.
+func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string, filter model.PRFilter) ([]*gogithub.PullRequest, error) {
+	var query string
+	switch filter {
+	case model.FilterReviewRequested:
+		query = fmt.Sprintf("is:open is:pr review-requested:%s repo:%s/%s", currentUser, owner, repo)
+	case model.FilterAuthored:
+		query = fmt.Sprintf("is:open is:pr author:%s repo:%s/%s", currentUser, owner, repo)
+	case model.FilterAll:
+		query = fmt.Sprintf("is:open is:pr repo:%s/%s", owner, repo)
+	}
+
 	searchOpts := &gogithub.SearchOptions{
 		ListOptions: gogithub.ListOptions{PerPage: 100},
 	}
