@@ -37,30 +37,39 @@ func CurrentUser(ctx context.Context, client *gogithub.Client) (string, error) {
 	return user.GetLogin(), nil
 }
 
-// FetchPRs fetches open PRs where the current user is a requested reviewer.
-func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string) ([]*gogithub.PullRequest, error) {
-	var result []*gogithub.PullRequest
-	opts := &gogithub.PullRequestListOptions{
-		State:       "open",
+// FetchPRs fetches open PRs according to the given filter.
+func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string, filter model.PRFilter) ([]*gogithub.PullRequest, error) {
+	var query string
+	switch filter {
+	case model.FilterReviewRequested:
+		query = fmt.Sprintf("is:open is:pr review-requested:%s repo:%s/%s", currentUser, owner, repo)
+	case model.FilterAuthored:
+		query = fmt.Sprintf("is:open is:pr author:%s repo:%s/%s", currentUser, owner, repo)
+	case model.FilterAll:
+		query = fmt.Sprintf("is:open is:pr repo:%s/%s", owner, repo)
+	}
+
+	searchOpts := &gogithub.SearchOptions{
 		ListOptions: gogithub.ListOptions{PerPage: 100},
 	}
+
+	var result []*gogithub.PullRequest
 	for {
-		prs, resp, err := client.PullRequests.List(ctx, owner, repo, opts)
+		searchResult, resp, err := client.Search.Issues(ctx, query, searchOpts)
 		if err != nil {
-			return nil, fmt.Errorf("list PRs: %w", err)
+			return nil, fmt.Errorf("search PRs: %w", err)
 		}
-		for _, pr := range prs {
-			for _, reviewer := range pr.RequestedReviewers {
-				if reviewer.GetLogin() == currentUser {
-					result = append(result, pr)
-					break
-				}
+		for _, issue := range searchResult.Issues {
+			pr, _, err := client.PullRequests.Get(ctx, owner, repo, issue.GetNumber())
+			if err != nil {
+				continue
 			}
+			result = append(result, pr)
 		}
 		if resp.NextPage == 0 {
 			break
 		}
-		opts.Page = resp.NextPage
+		searchOpts.Page = resp.NextPage
 	}
 	return result, nil
 }
