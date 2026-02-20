@@ -1,2 +1,6 @@
 .claude
 docs
+
+gh-review
+*.exe
+.worktrees/
