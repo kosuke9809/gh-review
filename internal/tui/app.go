@@ -1,0 +1,289 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	gogithub "github.com/google/go-github/v68/github"
+	"github.com/kosuke9809/gh-review/internal/git"
+	"github.com/kosuke9809/gh-review/internal/github"
+	"github.com/kosuke9809/gh-review/internal/model"
+)
+
+// Context returns a background context for use in main.go.
+func Context() context.Context {
+	return context.Background()
+}
+
+type fetchedMsg struct {
+	prs []model.PR
+	err error
+}
+
+type tickMsg time.Time
+
+// AppModel is the root bubbletea model.
+type AppModel struct {
+	activeTab   model.Tab
+	prsTab      prsTabModel
+	detailTab   detailTabModel
+	diffTab     diffTabModel
+	prs         []model.PR
+	loading     bool
+	err         error
+	lastSync    time.Time
+	repoName    string
+	repoOwner   string
+	repoRepo    string
+	repoRoot    string
+	currentUser string
+	ghClient    *gogithub.Client
+	width       int
+	height      int
+}
+
+// New creates a new AppModel.
+func New(owner, repo, repoRoot, currentUser string, client *gogithub.Client, width, height int) AppModel {
+	return AppModel{
+		activeTab:   model.TabPRs,
+		prsTab:      newPRsTab(width, height),
+		detailTab:   newDetailTab(width, height),
+		diffTab:     newDiffTab(width, height),
+		loading:     true,
+		repoName:    owner + "/" + repo,
+		repoOwner:   owner,
+		repoRepo:    repo,
+		repoRoot:    repoRoot,
+		currentUser: currentUser,
+		ghClient:    client,
+		width:       width,
+		height:      height,
+	}
+}
+
+func (m AppModel) Init() tea.Cmd {
+	return tea.Batch(m.fetchCmd(), tickCmd())
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(60*time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+func (m AppModel) fetchCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		ghPRs, err := github.FetchPRs(ctx, m.ghClient, m.repoOwner, m.repoRepo, m.currentUser)
+		if err != nil {
+			return fetchedMsg{err: err}
+		}
+		prs := make([]model.PR, 0, len(ghPRs))
+		for _, ghPR := range ghPRs {
+			reviews, _ := github.FetchReviews(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
+			checks, ciStatus, _ := github.FetchCheckRuns(ctx, m.ghClient, m.repoOwner, m.repoRepo, ghPR.GetHead().GetSHA())
+			comments, _ := github.FetchComments(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
+			files, _ := github.FetchDiff(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
+
+			wtPath := git.WorktreePath(m.repoRoot, int(ghPR.GetNumber()))
+			hasWt := git.WorktreeExists(m.repoRoot, int(ghPR.GetNumber()))
+			reviewState := github.CalcReviewState(m.currentUser, reviews, ghPR.GetUpdatedAt().Time)
+
+			prs = append(prs, model.PR{
+				Number:       int(ghPR.GetNumber()),
+				Title:        ghPR.GetTitle(),
+				Author:       ghPR.GetUser().GetLogin(),
+				BaseRef:      ghPR.GetBase().GetRef(),
+				HeadRef:      ghPR.GetHead().GetRef(),
+				HeadSHA:      ghPR.GetHead().GetSHA(),
+				Body:         ghPR.GetBody(),
+				CreatedAt:    ghPR.GetCreatedAt().Time,
+				UpdatedAt:    ghPR.GetUpdatedAt().Time,
+				HTMLURL:      ghPR.GetHTMLURL(),
+				CIStatus:     ciStatus,
+				CheckRuns:    checks,
+				Reviews:      reviews,
+				Comments:     comments,
+				DiffFiles:    files,
+				ReviewState:  reviewState,
+				HasWorktree:  hasWt,
+				WorktreePath: wtPath,
+			})
+		}
+		return fetchedMsg{prs: prs}
+	}
+}
+
+func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.prsTab = newPRsTab(msg.Width, msg.Height).SetPRs(m.prs)
+		m.detailTab = newDetailTab(msg.Width, msg.Height)
+		m.diffTab = newDiffTab(msg.Width, msg.Height)
+		if pr := m.prsTab.SelectedPR(); pr != nil {
+			m.detailTab = m.detailTab.SetPR(pr)
+			m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+		}
+
+	case fetchedMsg:
+		m.loading = false
+		m.lastSync = time.Now()
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.err = nil
+			m.prs = msg.prs
+			m.prsTab = m.prsTab.SetPRs(m.prs)
+			if pr := m.prsTab.SelectedPR(); pr != nil {
+				m.detailTab = m.detailTab.SetPR(pr)
+				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+			}
+		}
+
+	case tickMsg:
+		m.loading = true
+		return m, tea.Batch(m.fetchCmd(), tickCmd())
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "1":
+			m.activeTab = model.TabPRs
+		case "2":
+			m.activeTab = model.TabDetail
+		case "3":
+			m.activeTab = model.TabDiff
+		case "r":
+			m.loading = true
+			return m, m.fetchCmd()
+		case "o":
+			if pr := m.prsTab.SelectedPR(); pr != nil && pr.HasWorktree {
+				return m, openEditorCmd(pr.WorktreePath)
+			}
+		case "enter":
+			if m.activeTab == model.TabPRs {
+				return m, m.worktreeCmd()
+			}
+		case "d":
+			if m.activeTab == model.TabPRs {
+				m.activeTab = model.TabDiff
+			}
+		}
+	}
+
+	var cmd tea.Cmd
+	switch m.activeTab {
+	case model.TabPRs:
+		prevIdx := m.prsTab.list.Index()
+		m.prsTab, cmd = m.prsTab.Update(msg)
+		if m.prsTab.list.Index() != prevIdx {
+			if pr := m.prsTab.SelectedPR(); pr != nil {
+				m.detailTab = m.detailTab.SetPR(pr)
+				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+			}
+		}
+	case model.TabDetail:
+		m.detailTab, cmd = m.detailTab.Update(msg)
+	case model.TabDiff:
+		m.diffTab, cmd = m.diffTab.Update(msg)
+	}
+
+	return m, cmd
+}
+
+func (m AppModel) worktreeCmd() tea.Cmd {
+	pr := m.prsTab.SelectedPR()
+	if pr == nil {
+		return nil
+	}
+	prNum := pr.Number
+	repoRoot := m.repoRoot
+	return func() tea.Msg {
+		if !git.WorktreeExists(repoRoot, prNum) {
+			if err := git.CreateWorktree(repoRoot, prNum); err != nil {
+				return fetchedMsg{err: fmt.Errorf("worktree: %w", err)}
+			}
+		}
+		return tickMsg(time.Now())
+	}
+}
+
+func openEditorCmd(path string) tea.Cmd {
+	editor := "code"
+	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+		return nil
+	})
+}
+
+func (m AppModel) View() string {
+	header := m.renderHeader()
+	body := m.renderBody()
+	statusBar := m.renderStatusBar()
+	return lipgloss.JoinVertical(lipgloss.Left, header, body, statusBar)
+}
+
+func (m AppModel) renderHeader() string {
+	tabs := []struct {
+		label  string
+		tabVal model.Tab
+	}{
+		{"1:PRs", model.TabPRs},
+		{"2:Detail", model.TabDetail},
+		{"3:Diff", model.TabDiff},
+	}
+	var parts []string
+	for _, t := range tabs {
+		if t.tabVal == m.activeTab {
+			parts = append(parts, styleTabActive.Render(t.label))
+		} else {
+			parts = append(parts, styleTabInactive.Render(t.label))
+		}
+	}
+	title := lipgloss.NewStyle().Bold(true).Render("gh-review — " + m.repoName)
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Left, parts...)
+	return lipgloss.JoinHorizontal(lipgloss.Left, title+"  ", tabRow)
+}
+
+func (m AppModel) renderBody() string {
+	switch m.activeTab {
+	case model.TabPRs:
+		return m.prsTab.View()
+	case model.TabDetail:
+		return m.detailTab.View()
+	case model.TabDiff:
+		return m.diffTab.View()
+	}
+	return ""
+}
+
+func (m AppModel) renderStatusBar() string {
+	syncStr := ""
+	if !m.lastSync.IsZero() {
+		age := time.Since(m.lastSync).Round(time.Second)
+		syncStr = fmt.Sprintf("Last sync: %s ago", age)
+	}
+	if m.loading {
+		syncStr = "Syncing..."
+	}
+	if m.err != nil {
+		syncStr = styleStatusBar.Copy().Foreground(colorRed).Render("Error: " + m.err.Error())
+	}
+	help := "[Enter]worktree  [d]iff  [o]open  [r]efresh  [q]quit"
+	rightW := len(syncStr) + 1
+	if rightW > m.width {
+		rightW = m.width
+	}
+	return lipgloss.NewStyle().Width(m.width).Render(
+		lipgloss.JoinHorizontal(lipgloss.Left,
+			lipgloss.NewStyle().Width(m.width-rightW).Render(help),
+			styleStatusBar.Render(syncStr),
+		),
+	)
+}
