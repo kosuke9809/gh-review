@@ -10,6 +10,30 @@ const (
 	TabDiff
 )
 
+type PRFilter int
+
+const (
+	FilterReviewRequested PRFilter = iota // review-requested:@me
+	FilterAuthored                        // author:@me
+	FilterAll                             // all open PRs
+)
+
+func (f PRFilter) Label() string {
+	switch f {
+	case FilterReviewRequested:
+		return "Review Requested"
+	case FilterAuthored:
+		return "Authored"
+	case FilterAll:
+		return "All Open"
+	}
+	return ""
+}
+
+func (f PRFilter) Next() PRFilter {
+	return (f + 1) % 3
+}
+
 type ReviewState string
 
 const (
