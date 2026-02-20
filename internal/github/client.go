@@ -37,41 +37,37 @@ func CurrentUser(ctx context.Context, client *gogithub.Client) (string, error) {
 	return user.GetLogin(), nil
 }
 
-// FetchPRs fetches open PRs according to the given filter.
-func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string, filter model.PRFilter) ([]*gogithub.PullRequest, error) {
-	var query string
-	switch filter {
-	case model.FilterReviewRequested:
-		query = fmt.Sprintf("is:open is:pr review-requested:%s repo:%s/%s", currentUser, owner, repo)
-	case model.FilterAuthored:
-		query = fmt.Sprintf("is:open is:pr author:%s repo:%s/%s", currentUser, owner, repo)
-	case model.FilterAll:
-		query = fmt.Sprintf("is:open is:pr repo:%s/%s", owner, repo)
-	}
-
-	searchOpts := &gogithub.SearchOptions{
+// FetchPRs fetches all open PRs for the repo via the REST API.
+// IsReviewRequested is set to true when currentUser appears in RequestedReviewers.
+// Filtering is done client-side using model.FilterPRs.
+func FetchPRs(ctx context.Context, client *gogithub.Client, owner, repo, currentUser string) ([]*gogithub.PullRequest, error) {
+	opts := &gogithub.PullRequestListOptions{
+		State:       "open",
 		ListOptions: gogithub.ListOptions{PerPage: 100},
 	}
-
 	var result []*gogithub.PullRequest
 	for {
-		searchResult, resp, err := client.Search.Issues(ctx, query, searchOpts)
+		prs, resp, err := client.PullRequests.List(ctx, owner, repo, opts)
 		if err != nil {
-			return nil, fmt.Errorf("search PRs: %w", err)
+			return nil, fmt.Errorf("list PRs: %w", err)
 		}
-		for _, issue := range searchResult.Issues {
-			pr, _, err := client.PullRequests.Get(ctx, owner, repo, issue.GetNumber())
-			if err != nil {
-				continue
-			}
-			result = append(result, pr)
-		}
+		result = append(result, prs...)
 		if resp.NextPage == 0 {
 			break
 		}
-		searchOpts.Page = resp.NextPage
+		opts.Page = resp.NextPage
 	}
 	return result, nil
+}
+
+// IsReviewRequested reports whether currentUser is in the PR's requested reviewers.
+func IsReviewRequested(pr *gogithub.PullRequest, currentUser string) bool {
+	for _, r := range pr.RequestedReviewers {
+		if r.GetLogin() == currentUser {
+			return true
+		}
+	}
+	return false
 }
 
 // FetchReviews fetches all reviews for a PR.

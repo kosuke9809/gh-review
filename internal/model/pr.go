@@ -34,6 +34,26 @@ func (f PRFilter) Next() PRFilter {
 	return (f + 1) % 3
 }
 
+// FilterPRs returns PRs matching the given filter for currentUser.
+func FilterPRs(prs []PR, filter PRFilter, currentUser string) []PR {
+	var result []PR
+	for _, pr := range prs {
+		switch filter {
+		case FilterReviewRequested:
+			if pr.IsReviewRequested {
+				result = append(result, pr)
+			}
+		case FilterAuthored:
+			if pr.Author == currentUser {
+				result = append(result, pr)
+			}
+		case FilterAll:
+			result = append(result, pr)
+		}
+	}
+	return result
+}
+
 type ReviewState string
 
 const (
@@ -93,7 +113,8 @@ type PR struct {
 	Reviews      []Review
 	Comments     []Comment
 	DiffFiles    []DiffFile
-	ReviewState  ReviewState
-	HasWorktree  bool
-	WorktreePath string
+	ReviewState         ReviewState
+	IsReviewRequested   bool
+	HasWorktree         bool
+	WorktreePath        string
 }
