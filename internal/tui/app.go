@@ -33,7 +33,8 @@ type AppModel struct {
 	prsTab      prsTabModel
 	detailTab   detailTabModel
 	diffTab     diffTabModel
-	prs         []model.PR
+	allPRs      []model.PR // all fetched PRs (unfiltered)
+	prs         []model.PR // filtered view
 	loading     bool
 	err         error
 	lastSync    time.Time
@@ -79,7 +80,7 @@ func tickCmd() tea.Cmd {
 func (m AppModel) fetchCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		ghPRs, err := github.FetchPRs(ctx, m.ghClient, m.repoOwner, m.repoRepo, m.currentUser, m.filter)
+		ghPRs, err := github.FetchPRs(ctx, m.ghClient, m.repoOwner, m.repoRepo, m.currentUser)
 		if err != nil {
 			return fetchedMsg{err: err}
 		}
@@ -95,24 +96,25 @@ func (m AppModel) fetchCmd() tea.Cmd {
 			reviewState := github.CalcReviewState(m.currentUser, reviews, ghPR.GetUpdatedAt().Time)
 
 			prs = append(prs, model.PR{
-				Number:       int(ghPR.GetNumber()),
-				Title:        ghPR.GetTitle(),
-				Author:       ghPR.GetUser().GetLogin(),
-				BaseRef:      ghPR.GetBase().GetRef(),
-				HeadRef:      ghPR.GetHead().GetRef(),
-				HeadSHA:      ghPR.GetHead().GetSHA(),
-				Body:         ghPR.GetBody(),
-				CreatedAt:    ghPR.GetCreatedAt().Time,
-				UpdatedAt:    ghPR.GetUpdatedAt().Time,
-				HTMLURL:      ghPR.GetHTMLURL(),
-				CIStatus:     ciStatus,
-				CheckRuns:    checks,
-				Reviews:      reviews,
-				Comments:     comments,
-				DiffFiles:    files,
-				ReviewState:  reviewState,
-				HasWorktree:  hasWt,
-				WorktreePath: wtPath,
+				Number:              int(ghPR.GetNumber()),
+				Title:               ghPR.GetTitle(),
+				Author:              ghPR.GetUser().GetLogin(),
+				BaseRef:             ghPR.GetBase().GetRef(),
+				HeadRef:             ghPR.GetHead().GetRef(),
+				HeadSHA:             ghPR.GetHead().GetSHA(),
+				Body:                ghPR.GetBody(),
+				CreatedAt:           ghPR.GetCreatedAt().Time,
+				UpdatedAt:           ghPR.GetUpdatedAt().Time,
+				HTMLURL:             ghPR.GetHTMLURL(),
+				CIStatus:            ciStatus,
+				CheckRuns:           checks,
+				Reviews:             reviews,
+				Comments:            comments,
+				DiffFiles:           files,
+				ReviewState:         reviewState,
+				IsReviewRequested:   github.IsReviewRequested(ghPR, m.currentUser),
+				HasWorktree:         hasWt,
+				WorktreePath:        wtPath,
 			})
 		}
 		return fetchedMsg{prs: prs}
@@ -139,12 +141,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			m.err = nil
-			m.prs = msg.prs
-			m.prsTab = m.prsTab.SetPRs(m.prs)
-			if pr := m.prsTab.SelectedPR(); pr != nil {
-				m.detailTab = m.detailTab.SetPR(pr)
-				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
-			}
+			m.allPRs = msg.prs
+			m = m.applyFilter()
 		}
 
 	case tickMsg:
@@ -163,8 +161,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeTab = model.TabDiff
 		case "f":
 			m.filter = m.filter.Next()
-			m.loading = true
-			return m, m.fetchCmd()
+			m = m.applyFilter()
 		case "r":
 			m.loading = true
 			return m, m.fetchCmd()
@@ -201,6 +198,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+// applyFilter filters allPRs client-side and updates the PRs tab.
+func (m AppModel) applyFilter() AppModel {
+	m.prs = model.FilterPRs(m.allPRs, m.filter, m.currentUser)
+	m.prsTab = m.prsTab.SetPRs(m.prs)
+	if pr := m.prsTab.SelectedPR(); pr != nil {
+		m.detailTab = m.detailTab.SetPR(pr)
+		m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+	}
+	return m
 }
 
 func (m AppModel) worktreeCmd() tea.Cmd {
