@@ -4,9 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kosuke9809/gh-review/internal/model"
 	"github.com/kosuke9809/gh-review/internal/tui"
+	"github.com/muesli/termenv"
 )
+
+func init() {
+	lipgloss.DefaultRenderer().SetColorProfile(termenv.TrueColor)
+}
 
 func TestFormatPRRow(t *testing.T) {
 	pr := model.PR{
@@ -38,5 +44,23 @@ func TestRenderDetail(t *testing.T) {
 	}
 	if !strings.Contains(content, "alice") {
 		t.Error("expected author name in detail content")
+	}
+}
+
+func TestColorDiffLine(t *testing.T) {
+	tests := []struct {
+		line     string
+		hasColor bool
+	}{
+		{"+added line", true},
+		{"-removed line", true},
+		{"@@ -1,5 +1,5 @@", true},
+		{" context line", false},
+	}
+	for _, tt := range tests {
+		result := tui.ColorDiffLine(tt.line)
+		if tt.hasColor && result == tt.line {
+			t.Errorf("ColorDiffLine(%q) should apply color but got unchanged", tt.line)
+		}
 	}
 }
