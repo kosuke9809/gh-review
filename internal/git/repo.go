@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	httpsRe = regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
-	sshRe   = regexp.MustCompile(`git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$`)
+	httpsRe   = regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
+	sshRe     = regexp.MustCompile(`git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$`)
+	sshProtoRe = regexp.MustCompile(`ssh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
 )
 
 // ParseOwnerRepo extracts owner and repo name from a git remote URL.
@@ -20,6 +21,9 @@ func ParseOwnerRepo(remote string) (owner, repo string, err error) {
 		return m[1], m[2], nil
 	}
 	if m := sshRe.FindStringSubmatch(remote); m != nil {
+		return m[1], m[2], nil
+	}
+	if m := sshProtoRe.FindStringSubmatch(remote); m != nil {
 		return m[1], m[2], nil
 	}
 	return "", "", fmt.Errorf("cannot parse github owner/repo from remote: %q", remote)

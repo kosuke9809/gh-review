@@ -16,6 +16,7 @@ func TestParseOwnerRepo(t *testing.T) {
 		{"https://github.com/myorg/myrepo.git", "myorg", "myrepo", false},
 		{"git@github.com:myorg/myrepo.git", "myorg", "myrepo", false},
 		{"https://github.com/myorg/myrepo", "myorg", "myrepo", false},
+		{"ssh://git@github.com/myorg/myrepo.git", "myorg", "myrepo", false},
 		{"not-a-url", "", "", true},
 	}
 	for _, tt := range tests {
