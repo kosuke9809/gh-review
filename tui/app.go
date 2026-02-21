@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -61,11 +62,12 @@ type AppModel struct {
 
 // New creates a new AppModel.
 func New(owner, repo, repoRoot, currentUser string, client *gogithub.Client, width, height int) AppModel {
+	inner := width - 2
 	return AppModel{
 		activeTab:   model.TabPRs,
-		prsTab:      newPRsTab(width, height),
-		detailTab:   newDetailTab(width, height),
-		diffTab:     newDiffTab(width, height),
+		prsTab:      newPRsTab(inner, height),
+		detailTab:   newDetailTab(inner, height),
+		diffTab:     newDiffTab(inner, height),
 		loading:     true,
 		repoName:    owner + "/" + repo,
 		repoOwner:   owner,
@@ -171,9 +173,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.prsTab = newPRsTab(msg.Width, msg.Height).SetPRs(m.prs)
-		m.detailTab = newDetailTab(msg.Width, msg.Height)
-		m.diffTab = newDiffTab(msg.Width, msg.Height)
+		inner := msg.Width - 2
+		m.prsTab = newPRsTab(inner, msg.Height).SetPRs(m.prs)
+		m.detailTab = newDetailTab(inner, msg.Height)
+		m.diffTab = newDiffTab(inner, msg.Height)
 		if pr := m.prsTab.SelectedPR(); pr != nil {
 			m.detailTab = m.detailTab.SetPR(pr)
 			m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
@@ -303,13 +306,40 @@ func openEditorCmd(path string) tea.Cmd {
 }
 
 func (m AppModel) View() string {
-	header := m.renderHeader()
+	top := m.buildTopBorder()
 	body := m.renderBody()
-	statusBar := m.renderStatusBar()
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, statusBar)
+	bottom := m.buildBottomBorder()
+	return lipgloss.JoinVertical(lipgloss.Left, top, body, bottom)
 }
 
-func (m AppModel) renderHeader() string {
+func (m AppModel) buildTopBorder() string {
+	title := fmt.Sprintf("[gh-review — %s]", m.repoName)
+	tabs := m.renderTabsStr()
+	filter := lipgloss.NewStyle().Foreground(colorYellow).Render("[f] " + m.filter.Label())
+	inner := "─" + title + "─" + tabs + "─" + filter
+	innerW := lipgloss.Width(inner)
+	pad := m.width - 2 - innerW
+	if pad < 0 {
+		pad = 0
+	}
+	line := "┌" + inner + strings.Repeat("─", pad) + "┐"
+	return lipgloss.NewStyle().Foreground(colorGreen).Render(line)
+}
+
+func (m AppModel) buildBottomBorder() string {
+	help := m.helpStr()
+	sync := m.syncStr()
+	helpW := lipgloss.Width(help)
+	syncW := lipgloss.Width(sync)
+	pad := m.width - 2 - helpW - syncW - 1
+	if pad < 0 {
+		pad = 0
+	}
+	line := "└─" + help + strings.Repeat("─", pad) + sync + "─┘"
+	return lipgloss.NewStyle().Foreground(colorGreen).Render(line)
+}
+
+func (m AppModel) renderTabsStr() string {
 	tabs := []struct {
 		label  string
 		tabVal model.Tab
@@ -326,10 +356,32 @@ func (m AppModel) renderHeader() string {
 			parts = append(parts, styleTabInactive.Render(t.label))
 		}
 	}
-	title := lipgloss.NewStyle().Bold(true).Render("gh-review — " + m.repoName)
-	tabRow := lipgloss.JoinHorizontal(lipgloss.Left, parts...)
-	filterLabel := lipgloss.NewStyle().Foreground(colorYellow).Render("[f] " + m.filter.Label())
-	return lipgloss.JoinHorizontal(lipgloss.Left, title+"  ", tabRow, "  ", filterLabel)
+	return strings.Join(parts, "")
+}
+
+func (m AppModel) helpStr() string {
+	switch m.activeTab {
+	case model.TabDiff:
+		return "[tab]pane  [j/k]scroll  [f]filter  [r]efresh  [q]quit"
+	case model.TabPRs:
+		return "[Enter]create  [o]open  [D]delete  [d]iff  [f]filter  [r]efresh  [q]quit"
+	default:
+		return "[j/k]scroll  [f]filter  [r]efresh  [q]quit"
+	}
+}
+
+func (m AppModel) syncStr() string {
+	if m.err != nil {
+		return lipgloss.NewStyle().Foreground(colorRed).Render("Error: " + m.err.Error())
+	}
+	if m.loading {
+		return "Syncing..."
+	}
+	if !m.lastSync.IsZero() {
+		age := time.Since(m.lastSync).Round(time.Second)
+		return fmt.Sprintf("%s ago", age)
+	}
+	return ""
 }
 
 func (m AppModel) renderBody() string {
@@ -342,29 +394,4 @@ func (m AppModel) renderBody() string {
 		return m.diffTab.View()
 	}
 	return ""
-}
-
-func (m AppModel) renderStatusBar() string {
-	syncStr := ""
-	if !m.lastSync.IsZero() {
-		age := time.Since(m.lastSync).Round(time.Second)
-		syncStr = fmt.Sprintf("Last sync: %s ago", age)
-	}
-	if m.loading {
-		syncStr = "Syncing..."
-	}
-	if m.err != nil {
-		syncStr = styleStatusBar.Foreground(colorRed).Render("Error: " + m.err.Error())
-	}
-	help := "[Enter]worktree  [d]iff  [o]open  [f]filter  [r]efresh  [q]quit"
-	rightW := len(syncStr) + 1
-	if rightW > m.width {
-		rightW = m.width
-	}
-	return lipgloss.NewStyle().Width(m.width).Render(
-		lipgloss.JoinHorizontal(lipgloss.Left,
-			lipgloss.NewStyle().Width(m.width-rightW).Render(help),
-			styleStatusBar.Render(syncStr),
-		),
-	)
 }
