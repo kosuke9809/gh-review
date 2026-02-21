@@ -100,12 +100,16 @@ func newPRsTab(width, height int) prsTabModel {
 }
 
 func (m prsTabModel) SetPRs(prs []model.PR) prsTabModel {
+	curIdx := m.list.Index()
 	m.prs = prs
 	items := make([]list.Item, len(prs))
 	for i, pr := range prs {
 		items[i] = prItem{pr: pr, totalReviewers: len(pr.Reviews) + 1}
 	}
 	m.list.SetItems(items)
+	if curIdx > 0 && curIdx < len(items) {
+		m.list.Select(curIdx)
+	}
 	return m
 }
 

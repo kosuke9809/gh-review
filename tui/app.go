@@ -198,6 +198,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.allPRs = msg.prs
 			m = m.applyFilter()
+			if pr := m.prsTab.SelectedPR(); pr != nil && !pr.DetailLoaded {
+				m.loadingDetail = true
+				return m, m.detailFetchCmd(*pr)
+			}
 		}
 
 	case detailFetchedMsg:
