@@ -8,6 +8,31 @@ import (
 	"github.com/kosuke9809/gh-review/model"
 )
 
+func TestNewClientForHost(t *testing.T) {
+	t.Run("github.com default", func(t *testing.T) {
+		client, err := github.NewClientForHost("dummy-token", "github.com")
+		if err != nil {
+			t.Fatalf("NewClientForHost(github.com) error = %v", err)
+		}
+		if got := client.BaseURL.String(); got != "https://api.github.com/" {
+			t.Fatalf("BaseURL = %q, want %q", got, "https://api.github.com/")
+		}
+	})
+
+	t.Run("enterprise host", func(t *testing.T) {
+		client, err := github.NewClientForHost("dummy-token", "github.example.com")
+		if err != nil {
+			t.Fatalf("NewClientForHost(github.example.com) error = %v", err)
+		}
+		if got := client.BaseURL.String(); got != "https://github.example.com/api/v3/" {
+			t.Fatalf("BaseURL = %q, want %q", got, "https://github.example.com/api/v3/")
+		}
+		if got := client.UploadURL.String(); got != "https://github.example.com/api/uploads/" {
+			t.Fatalf("UploadURL = %q, want %q", got, "https://github.example.com/api/uploads/")
+		}
+	})
+}
+
 func TestCalcReviewState(t *testing.T) {
 	now := time.Now()
 	lastReview := now.Add(-2 * time.Hour)

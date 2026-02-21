@@ -17,6 +17,8 @@ func TestParseOwnerRepo(t *testing.T) {
 		{"git@github.com:myorg/myrepo.git", "myorg", "myrepo", false},
 		{"https://github.com/myorg/myrepo", "myorg", "myrepo", false},
 		{"ssh://git@github.com/myorg/myrepo.git", "myorg", "myrepo", false},
+		{"git@github.example.com:myorg/myrepo.git", "myorg", "myrepo", false},
+		{"https://github.example.com/myorg/myrepo.git", "myorg", "myrepo", false},
 		{"not-a-url", "", "", true},
 	}
 	for _, tt := range tests {
@@ -27,6 +29,33 @@ func TestParseOwnerRepo(t *testing.T) {
 		}
 		if owner != tt.wantOwner || repo != tt.wantRepo {
 			t.Errorf("ParseOwnerRepo(%q) = (%q, %q), want (%q, %q)", tt.remote, owner, repo, tt.wantOwner, tt.wantRepo)
+		}
+	}
+}
+
+func TestParseHostOwnerRepo(t *testing.T) {
+	tests := []struct {
+		remote    string
+		wantHost  string
+		wantOwner string
+		wantRepo  string
+		wantErr   bool
+	}{
+		{"https://github.com/myorg/myrepo.git", "github.com", "myorg", "myrepo", false},
+		{"git@github.com:myorg/myrepo.git", "github.com", "myorg", "myrepo", false},
+		{"ssh://git@github.example.com/myorg/myrepo.git", "github.example.com", "myorg", "myrepo", false},
+		{"ssh://git@github.example.com:2222/myorg/myrepo.git", "github.example.com", "myorg", "myrepo", false},
+		{"https://github.example.com/myorg/myrepo", "github.example.com", "myorg", "myrepo", false},
+		{"not-a-url", "", "", "", true},
+	}
+	for _, tt := range tests {
+		host, owner, repo, err := git.ParseHostOwnerRepo(tt.remote)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("ParseHostOwnerRepo(%q) error = %v, wantErr %v", tt.remote, err, tt.wantErr)
+			continue
+		}
+		if host != tt.wantHost || owner != tt.wantOwner || repo != tt.wantRepo {
+			t.Errorf("ParseHostOwnerRepo(%q) = (%q, %q, %q), want (%q, %q, %q)", tt.remote, host, owner, repo, tt.wantHost, tt.wantOwner, tt.wantRepo)
 		}
 	}
 }

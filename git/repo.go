@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -10,23 +11,39 @@ import (
 )
 
 var (
-	httpsRe   = regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
-	sshRe     = regexp.MustCompile(`git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$`)
-	sshProtoRe = regexp.MustCompile(`ssh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?$`)
+	scpLikeRe = regexp.MustCompile(`^(?:[^@]+@)?([^:/]+):([^/]+)/([^/]+?)(?:\.git)?$`)
 )
+
+// ParseHostOwnerRepo extracts host, owner and repo name from a git remote URL.
+func ParseHostOwnerRepo(remote string) (host, owner, repo string, err error) {
+	remote = strings.TrimSpace(remote)
+	if m := scpLikeRe.FindStringSubmatch(remote); m != nil {
+		return m[1], m[2], m[3], nil
+	}
+
+	u, err := url.Parse(remote)
+	if err != nil {
+		return "", "", "", fmt.Errorf("cannot parse remote URL %q: %w", remote, err)
+	}
+	if u.Host == "" {
+		return "", "", "", fmt.Errorf("cannot parse github host/owner/repo from remote: %q", remote)
+	}
+
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", "", fmt.Errorf("cannot parse github host/owner/repo from remote: %q", remote)
+	}
+	repo = strings.TrimSuffix(parts[1], ".git")
+	if repo == "" {
+		return "", "", "", fmt.Errorf("cannot parse github host/owner/repo from remote: %q", remote)
+	}
+	return u.Hostname(), parts[0], repo, nil
+}
 
 // ParseOwnerRepo extracts owner and repo name from a git remote URL.
 func ParseOwnerRepo(remote string) (owner, repo string, err error) {
-	if m := httpsRe.FindStringSubmatch(remote); m != nil {
-		return m[1], m[2], nil
-	}
-	if m := sshRe.FindStringSubmatch(remote); m != nil {
-		return m[1], m[2], nil
-	}
-	if m := sshProtoRe.FindStringSubmatch(remote); m != nil {
-		return m[1], m[2], nil
-	}
-	return "", "", fmt.Errorf("cannot parse github owner/repo from remote: %q", remote)
+	_, owner, repo, err = ParseHostOwnerRepo(remote)
+	return owner, repo, err
 }
 
 // RepoRoot returns the root directory of the current git repository.

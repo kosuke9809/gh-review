@@ -6,8 +6,8 @@ import (
 	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/kosuke9809/gh-review/github"
 	"github.com/kosuke9809/gh-review/git"
+	"github.com/kosuke9809/gh-review/github"
 	"github.com/kosuke9809/gh-review/tui"
 	"golang.org/x/term"
 )
@@ -35,17 +35,20 @@ func run() error {
 		return fmt.Errorf("no 'origin' remote found: %w", err)
 	}
 
-	owner, repo, err := git.ParseOwnerRepo(remoteURL)
+	host, owner, repo, err := git.ParseHostOwnerRepo(remoteURL)
 	if err != nil {
 		return fmt.Errorf("remote is not a GitHub URL: %w", err)
 	}
 
-	token, err := github.Token()
+	token, _, err := github.TokenForHost(host)
 	if err != nil {
 		return err
 	}
 
-	client := github.NewClient(token)
+	client, err := github.NewClientForHost(token, host)
+	if err != nil {
+		return fmt.Errorf("failed to configure GitHub client for host %q: %w", host, err)
+	}
 
 	ctx := tui.Context()
 	currentUser, err := github.CurrentUser(ctx, client)
