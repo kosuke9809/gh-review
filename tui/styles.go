@@ -23,8 +23,6 @@ var (
 				Foreground(colorGray).
 				Padding(0, 1)
 
-	styleStatusBar = lipgloss.NewStyle().
-			Foreground(colorGray)
 
 	styleBadgeNew  = lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
 	styleBadgeUpd  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
