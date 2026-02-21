@@ -135,10 +135,10 @@ func (m detailTabModel) Update(msg tea.Msg) (detailTabModel, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "j":
-			m.viewport.LineDown(1)
+			m.viewport.ScrollDown(1)
 			return m, nil
 		case "k":
-			m.viewport.LineUp(1)
+			m.viewport.ScrollUp(1)
 			return m, nil
 		}
 	}
