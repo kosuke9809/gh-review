@@ -64,3 +64,35 @@ func TestColorDiffLine(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatPRRow_ContainsAuthor(t *testing.T) {
+	pr := model.PR{
+		Number:      10,
+		Title:       "My PR",
+		Author:      "alice",
+		BaseRef:     "main",
+		HeadRef:     "feat",
+		CIStatus:    model.CIStatusPass,
+		ReviewState: model.ReviewStateNew,
+	}
+	row := tui.FormatPRRow(pr, 1, false)
+	if !strings.Contains(row, "alice") {
+		t.Error("expected author in PR row")
+	}
+	if !strings.Contains(row, "main←feat") {
+		t.Error("expected branch info in PR row")
+	}
+}
+
+func TestFormatPRRow_WorktreeIcon(t *testing.T) {
+	pr := model.PR{
+		Number:      11,
+		Title:       "With WT",
+		ReviewState: model.ReviewStateNew,
+		HasWorktree: true,
+	}
+	row := tui.FormatPRRow(pr, 1, false)
+	if !strings.Contains(row, "⎇") {
+		t.Error("expected ⎇ worktree icon in PR row")
+	}
+}
