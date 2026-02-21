@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	gogithub "github.com/google/go-github/v68/github"
 	"github.com/kosuke9809/gh-review/git"
@@ -55,14 +56,19 @@ type AppModel struct {
 	repoRepo    string
 	repoRoot    string
 	currentUser string
-	ghClient    *gogithub.Client
-	width       int
-	height      int
+	ghClient      *gogithub.Client
+	width         int
+	height        int
+	spinner       spinner.Model
+	loadingDetail bool
 }
 
 // New creates a new AppModel.
 func New(owner, repo, repoRoot, currentUser string, client *gogithub.Client, width, height int) AppModel {
 	inner := width - 2
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(colorGreen)
 	return AppModel{
 		activeTab:   model.TabPRs,
 		prsTab:      newPRsTab(inner, height),
@@ -77,11 +83,12 @@ func New(owner, repo, repoRoot, currentUser string, client *gogithub.Client, wid
 		ghClient:    client,
 		width:       width,
 		height:      height,
+		spinner:     sp,
 	}
 }
 
 func (m AppModel) Init() tea.Cmd {
-	return tea.Batch(m.fetchCmd(), tickCmd())
+	return tea.Batch(m.fetchCmd(), tickCmd(), m.spinner.Tick)
 }
 
 func tickCmd() tea.Cmd {
@@ -194,6 +201,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case detailFetchedMsg:
+		m.loadingDetail = false
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
@@ -211,6 +219,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m = m.applyFilter()
 		}
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tickMsg:
 		m.loading = true
@@ -257,6 +270,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailTab = m.detailTab.SetPR(pr)
 				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
 				if !pr.DetailLoaded {
+					m.loadingDetail = true
 					return m, m.detailFetchCmd(*pr)
 				}
 			}
@@ -385,12 +399,33 @@ func (m AppModel) syncStr() string {
 }
 
 func (m AppModel) renderBody() string {
+	if m.loading && len(m.allPRs) == 0 {
+		return lipgloss.NewStyle().
+			Width(m.width - 2).
+			Height(m.height - 4).
+			Align(lipgloss.Center, lipgloss.Center).
+			Render(m.spinner.View() + " Loading PRs...")
+	}
 	switch m.activeTab {
 	case model.TabPRs:
 		return m.prsTab.View()
 	case model.TabDetail:
+		if m.loadingDetail {
+			return lipgloss.NewStyle().
+				Width(m.width - 2).
+				Height(m.height - 4).
+				Align(lipgloss.Center, lipgloss.Center).
+				Render(m.spinner.View() + " Loading details...")
+		}
 		return m.detailTab.View()
 	case model.TabDiff:
+		if m.loadingDetail {
+			return lipgloss.NewStyle().
+				Width(m.width - 2).
+				Height(m.height - 4).
+				Align(lipgloss.Center, lipgloss.Center).
+				Render(m.spinner.View() + " Loading diff...")
+		}
 		return m.diffTab.View()
 	}
 	return ""
