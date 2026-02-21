@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 type prItem struct {
@@ -30,10 +31,46 @@ func (p prItem) renderMeta() string {
 	badge := badgeForState(string(p.pr.ReviewState))
 	wt := ""
 	if p.pr.HasWorktree {
-		wt = lipgloss.NewStyle().Foreground(colorGreen).Render(" [wt]")
+		wt = " " + lipgloss.NewStyle().Foreground(colorGreen).Render("⎇")
 	}
-	return fmt.Sprintf("CI:%s  Review:%s  %s%s", ci, review, badge, wt)
+	author := ""
+	if p.pr.Author != "" {
+		author = "@" + p.pr.Author
+	}
+	branch := ""
+	if p.pr.BaseRef != "" {
+		branch = fmt.Sprintf("  %s←%s", p.pr.BaseRef, p.pr.HeadRef)
+	}
+	return fmt.Sprintf("%s%s  CI:%s  Review:%s  %s%s", author, branch, ci, review, badge, wt)
 }
+
+// prItemDelegate colors PR title rows by ReviewState.
+type prItemDelegate struct {
+	list.DefaultDelegate
+}
+
+func newPRItemDelegate() prItemDelegate {
+	return prItemDelegate{DefaultDelegate: list.NewDefaultDelegate()}
+}
+
+func (d prItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	pr, ok := item.(prItem)
+	if !ok {
+		d.DefaultDelegate.Render(w, m, index, item)
+		return
+	}
+	isSelected := index == m.Index()
+	title := rowStyleForState(pr.pr.ReviewState).Render(pr.Title())
+	desc := lipgloss.NewStyle().Foreground(colorGray).Render(pr.Description())
+	if isSelected {
+		title = styleSelected.Render(pr.Title())
+		desc = styleSelected.Foreground(colorGray).Render(pr.Description())
+	}
+	fmt.Fprintf(w, "%s\n%s\n", title, desc)
+}
+
+func (d prItemDelegate) Height() int  { return 2 }
+func (d prItemDelegate) Spacing() int { return 1 }
 
 // FormatPRRow returns a text representation of a PR row (used in tests).
 func FormatPRRow(pr model.PR, totalReviewers int, selected bool) string {
@@ -53,7 +90,7 @@ type prsTabModel struct {
 }
 
 func newPRsTab(width, height int) prsTabModel {
-	delegate := list.NewDefaultDelegate()
+	delegate := newPRItemDelegate()
 	l := list.New(nil, delegate, width, height-4)
 	l.Title = ""
 	l.SetShowStatusBar(false)
@@ -63,12 +100,16 @@ func newPRsTab(width, height int) prsTabModel {
 }
 
 func (m prsTabModel) SetPRs(prs []model.PR) prsTabModel {
+	curIdx := m.list.Index()
 	m.prs = prs
 	items := make([]list.Item, len(prs))
 	for i, pr := range prs {
 		items[i] = prItem{pr: pr, totalReviewers: len(pr.Reviews) + 1}
 	}
 	m.list.SetItems(items)
+	if curIdx > 0 && curIdx < len(items) {
+		m.list.Select(curIdx)
+	}
 	return m
 }
 

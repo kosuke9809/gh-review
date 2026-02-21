@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kosuke9809/gh-review/internal/model"
-	"github.com/kosuke9809/gh-review/internal/tui"
+	"github.com/kosuke9809/gh-review/model"
+	"github.com/kosuke9809/gh-review/tui"
 	"github.com/muesli/termenv"
 )
 
@@ -62,5 +62,53 @@ func TestColorDiffLine(t *testing.T) {
 		if tt.hasColor && result == tt.line {
 			t.Errorf("ColorDiffLine(%q) should apply color but got unchanged", tt.line)
 		}
+	}
+}
+
+func TestFormatPRRow_ContainsAuthor(t *testing.T) {
+	pr := model.PR{
+		Number:      10,
+		Title:       "My PR",
+		Author:      "alice",
+		BaseRef:     "main",
+		HeadRef:     "feat",
+		CIStatus:    model.CIStatusPass,
+		ReviewState: model.ReviewStateNew,
+	}
+	row := tui.FormatPRRow(pr, 1, false)
+	if !strings.Contains(row, "alice") {
+		t.Error("expected author in PR row")
+	}
+	if !strings.Contains(row, "main←feat") {
+		t.Error("expected branch info in PR row")
+	}
+}
+
+func TestFormatPRRow_WorktreeIcon(t *testing.T) {
+	pr := model.PR{
+		Number:      11,
+		Title:       "With WT",
+		ReviewState: model.ReviewStateNew,
+		HasWorktree: true,
+	}
+	row := tui.FormatPRRow(pr, 1, false)
+	if !strings.Contains(row, "⎇") {
+		t.Error("expected ⎇ worktree icon in PR row")
+	}
+}
+
+func TestRenderDetail_WithBody(t *testing.T) {
+	pr := model.PR{
+		Number: 5,
+		Title:  "PR with body",
+		Author: "bob",
+		Body:   "This is the PR description.",
+	}
+	content := tui.RenderDetailContent(pr)
+	if !strings.Contains(content, "Description") {
+		t.Error("expected Description section in detail content")
+	}
+	if !strings.Contains(content, "This is the PR description.") {
+		t.Error("expected body text in detail content")
 	}
 }

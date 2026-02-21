@@ -8,7 +8,7 @@ import (
 	"time"
 
 	gogithub "github.com/google/go-github/v68/github"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/model"
 	"golang.org/x/oauth2"
 )
 
@@ -147,8 +147,10 @@ func FetchDiff(ctx context.Context, client *gogithub.Client, owner, repo string,
 	var result []model.DiffFile
 	for _, f := range files {
 		result = append(result, model.DiffFile{
-			Filename: f.GetFilename(),
-			Patch:    f.GetPatch(),
+			Filename:  f.GetFilename(),
+			Patch:     f.GetPatch(),
+			Additions: int(f.GetAdditions()),
+			Deletions: int(f.GetDeletions()),
 		})
 	}
 	return result, nil

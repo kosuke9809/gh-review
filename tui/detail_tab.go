@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 type detailTabModel struct {
@@ -34,6 +34,7 @@ func (m detailTabModel) SetPR(pr *model.PR) detailTabModel {
 // RenderDetailContent builds the text content for the Detail tab.
 func RenderDetailContent(pr model.PR) string {
 	var b strings.Builder
+	sep := lipgloss.NewStyle().Foreground(colorGray).Render(strings.Repeat("─", 60))
 
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("#%d: %s", pr.Number, pr.Title)))
 	b.WriteString("\n\n")
@@ -47,10 +48,18 @@ func RenderDetailContent(pr model.PR) string {
 	b.WriteString(fmt.Sprintf("Branch: %s ← %s\n", pr.BaseRef, pr.HeadRef))
 
 	if pr.HasWorktree {
-		b.WriteString(fmt.Sprintf("\nWorktree: %s  [o: open in editor]\n", pr.WorktreePath))
+		b.WriteString(fmt.Sprintf("Worktree: %s  [o:open] [D:delete]\n", pr.WorktreePath))
 	}
 
-	b.WriteString("\n")
+	if pr.Body != "" {
+		b.WriteString("\n" + sep + "\n")
+		b.WriteString(lipgloss.NewStyle().Bold(true).Render("Description"))
+		b.WriteString("\n\n")
+		b.WriteString(pr.Body)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n" + sep + "\n")
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("CI Checks"))
 	if len(pr.CheckRuns) == 0 {
 		b.WriteString(fmt.Sprintf(" — %s\n", ciIconStr(string(pr.CIStatus))))
@@ -67,7 +76,7 @@ func RenderDetailContent(pr model.PR) string {
 		}
 	}
 
-	b.WriteString("\n")
+	b.WriteString("\n" + sep + "\n")
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Reviews"))
 	b.WriteString("\n")
 	if len(pr.Reviews) == 0 {
@@ -86,7 +95,7 @@ func RenderDetailContent(pr model.PR) string {
 		}
 	}
 
-	b.WriteString("\n")
+	b.WriteString("\n" + sep + "\n")
 	unread := 0
 	for _, c := range pr.Comments {
 		if c.IsUnread {
@@ -123,6 +132,16 @@ func formatDuration(d time.Duration) string {
 
 func (m detailTabModel) Update(msg tea.Msg) (detailTabModel, tea.Cmd) {
 	var cmd tea.Cmd
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "j":
+			m.viewport.ScrollDown(1)
+			return m, nil
+		case "k":
+			m.viewport.ScrollUp(1)
+			return m, nil
+		}
+	}
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
 }

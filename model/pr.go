@@ -2,14 +2,6 @@ package model
 
 import "time"
 
-type Tab int
-
-const (
-	TabPRs Tab = iota
-	TabDetail
-	TabDiff
-)
-
 type PRFilter int
 
 const (
@@ -93,8 +85,10 @@ type Comment struct {
 }
 
 type DiffFile struct {
-	Filename string
-	Patch    string
+	Filename  string
+	Patch     string
+	Additions int
+	Deletions int
 }
 
 type PR struct {
@@ -117,4 +111,5 @@ type PR struct {
 	IsReviewRequested   bool
 	HasWorktree         bool
 	WorktreePath        string
+	DetailLoaded        bool // true after lazy detail fetch completes
 }

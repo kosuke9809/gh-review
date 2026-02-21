@@ -75,3 +75,12 @@ func CreateWorktree(repoRoot string, prNumber int) error {
 	}
 	return nil
 }
+
+// RemoveWorktree removes the git worktree for the given PR number.
+func RemoveWorktree(repoRoot string, prNumber int) error {
+	path := WorktreePath(repoRoot, prNumber)
+	if err := exec.Command("git", "worktree", "remove", "--force", path).Run(); err != nil {
+		return fmt.Errorf("failed to remove worktree at %s: %w", path, err)
+	}
+	return nil
+}

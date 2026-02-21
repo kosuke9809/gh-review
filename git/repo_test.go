@@ -3,7 +3,7 @@ package git_test
 import (
 	"testing"
 
-	"github.com/kosuke9809/gh-review/internal/git"
+	"github.com/kosuke9809/gh-review/git"
 )
 
 func TestParseOwnerRepo(t *testing.T) {
@@ -36,5 +36,12 @@ func TestWorktreePath(t *testing.T) {
 	want := "/repo/root/.worktrees/pr-142"
 	if path != want {
 		t.Errorf("WorktreePath = %q, want %q", path, want)
+	}
+}
+
+func TestRemoveWorktree_NonExistent(t *testing.T) {
+	err := git.RemoveWorktree("/tmp/nonexistent-repo-gh-review-test", 99999)
+	if err == nil {
+		t.Error("expected error for non-existent worktree, got nil")
 	}
 }
