@@ -201,9 +201,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prsTab = newPRsTab(inner, msg.Height).SetPRs(m.prs)
 		m.detailTab = newDetailTab(inner, msg.Height)
 		m.diffTab = newDiffTab(inner, msg.Height)
-		if pr := m.prsTab.SelectedPR(); pr != nil {
-			m.detailTab = m.detailTab.SetPR(pr)
-			m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+		if m.selectedPR != nil {
+			m.detailTab = m.detailTab.SetPR(m.selectedPR)
+			m.diffTab = m.diffTab.SetFiles(m.selectedPR.DiffFiles)
 		}
 
 	case fetchedMsg:
@@ -215,9 +215,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.allPRs = msg.prs
 			m = m.applyFilter()
-			if pr := m.prsTab.SelectedPR(); pr != nil && !pr.DetailLoaded {
-				m.loadingDetail = true
-				return m, m.detailFetchCmd(*pr)
+			// Re-fetch details for currently viewed PR
+			if m.selectedPR != nil {
+				for _, pr := range m.allPRs {
+					if pr.Number == m.selectedPR.Number {
+						pr := pr
+						m.selectedPR = &pr
+						if !pr.DetailLoaded {
+							m.loadingDetail = true
+							return m, m.detailFetchCmd(pr)
+						}
+					}
+				}
 			}
 		}
 
@@ -235,6 +244,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.allPRs[i].DiffFiles = msg.files
 					m.allPRs[i].DetailLoaded = true
 					m.allPRs[i].ReviewState = github.CalcReviewState(m.currentUser, msg.reviews, m.allPRs[i].UpdatedAt)
+					// Update selectedPR if this is the PR being viewed
+					if m.selectedPR != nil && m.selectedPR.Number == msg.prNumber {
+						updated := m.allPRs[i]
+						m.selectedPR = &updated
+						m.detailTab = m.detailTab.SetPR(m.selectedPR)
+						m.diffTab = m.diffTab.SetFiles(m.selectedPR.DiffFiles)
+					}
 					break
 				}
 			}
@@ -254,58 +270,73 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "1":
-			m.activeTab = model.TabPRs
-		case "2":
-			m.activeTab = model.TabDetail
-		case "3":
-			m.activeTab = model.TabDiff
+		case "esc", "b":
+			if m.screen == screenDetail {
+				m.screen = screenList
+				return m, nil
+			}
+		case "tab":
+			if m.screen == screenDetail {
+				if m.detailSubTab == subTabDetail {
+					m.detailSubTab = subTabDiff
+				} else {
+					m.detailSubTab = subTabDetail
+				}
+				return m, nil
+			}
 		case "f":
-			m.filter = m.filter.Next()
-			m = m.applyFilter()
+			if m.screen == screenList {
+				m.filter = m.filter.Next()
+				m = m.applyFilter()
+				return m, nil
+			}
 		case "r":
 			m.loading = true
 			return m, m.fetchCmd()
-		case "o":
-			if pr := m.prsTab.SelectedPR(); pr != nil && pr.HasWorktree {
-				return m, openEditorCmd(pr.WorktreePath)
-			}
 		case "enter":
-			if m.activeTab == model.TabPRs {
+			if m.screen == screenList {
+				if pr := m.prsTab.SelectedPR(); pr != nil {
+					pr := *pr
+					m.selectedPR = &pr
+					m.screen = screenDetail
+					m.detailSubTab = subTabDetail
+					m.detailTab = m.detailTab.SetPR(m.selectedPR)
+					m.diffTab = m.diffTab.SetFiles(m.selectedPR.DiffFiles)
+					if !pr.DetailLoaded {
+						m.loadingDetail = true
+						return m, m.detailFetchCmd(pr)
+					}
+					return m, nil
+				}
+			}
+		case "w":
+			if m.screen == screenList {
 				return m, m.worktreeCmd()
 			}
-		case "D":
-			if m.activeTab == model.TabPRs {
-				return m, m.removeWorktreeCmd()
+		case "o":
+			if m.screen == screenList {
+				if pr := m.prsTab.SelectedPR(); pr != nil && pr.HasWorktree {
+					return m, openEditorCmd(pr.WorktreePath)
+				}
 			}
-		case "d":
-			if m.activeTab == model.TabPRs {
-				m.activeTab = model.TabDiff
+		case "D":
+			if m.screen == screenList {
+				return m, m.removeWorktreeCmd()
 			}
 		}
 	}
 
 	var cmd tea.Cmd
-	switch m.activeTab {
-	case model.TabPRs:
-		prevIdx := m.prsTab.list.Index()
+	if m.screen == screenList {
 		m.prsTab, cmd = m.prsTab.Update(msg)
-		if m.prsTab.list.Index() != prevIdx {
-			if pr := m.prsTab.SelectedPR(); pr != nil {
-				m.detailTab = m.detailTab.SetPR(pr)
-				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
-				if !pr.DetailLoaded {
-					m.loadingDetail = true
-					return m, m.detailFetchCmd(*pr)
-				}
-			}
+	} else {
+		switch m.detailSubTab {
+		case subTabDetail:
+			m.detailTab, cmd = m.detailTab.Update(msg)
+		case subTabDiff:
+			m.diffTab, cmd = m.diffTab.Update(msg)
 		}
-	case model.TabDetail:
-		m.detailTab, cmd = m.detailTab.Update(msg)
-	case model.TabDiff:
-		m.diffTab, cmd = m.diffTab.Update(msg)
 	}
-
 	return m, cmd
 }
 
