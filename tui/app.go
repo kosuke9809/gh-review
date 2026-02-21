@@ -12,6 +12,7 @@ import (
 	"github.com/kosuke9809/gh-review/git"
 	"github.com/kosuke9809/gh-review/github"
 	"github.com/kosuke9809/gh-review/model"
+	"golang.org/x/sync/errgroup"
 )
 
 // Context returns a background context for use in main.go.
@@ -22,6 +23,16 @@ func Context() context.Context {
 type fetchedMsg struct {
 	prs []model.PR
 	err error
+}
+
+type detailFetchedMsg struct {
+	prNumber int
+	reviews  []model.Review
+	checks   []model.CheckRun
+	ciStatus model.CIStatus
+	comments []model.Comment
+	files    []model.DiffFile
+	err      error
 }
 
 type tickMsg time.Time
@@ -86,38 +97,72 @@ func (m AppModel) fetchCmd() tea.Cmd {
 		}
 		prs := make([]model.PR, 0, len(ghPRs))
 		for _, ghPR := range ghPRs {
-			reviews, _ := github.FetchReviews(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
-			checks, ciStatus, _ := github.FetchCheckRuns(ctx, m.ghClient, m.repoOwner, m.repoRepo, ghPR.GetHead().GetSHA())
-			comments, _ := github.FetchComments(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
-			files, _ := github.FetchDiff(ctx, m.ghClient, m.repoOwner, m.repoRepo, int(ghPR.GetNumber()))
-
 			wtPath := git.WorktreePath(m.repoRoot, int(ghPR.GetNumber()))
 			hasWt := git.WorktreeExists(m.repoRoot, int(ghPR.GetNumber()))
-			reviewState := github.CalcReviewState(m.currentUser, reviews, ghPR.GetUpdatedAt().Time)
-
 			prs = append(prs, model.PR{
-				Number:              int(ghPR.GetNumber()),
-				Title:               ghPR.GetTitle(),
-				Author:              ghPR.GetUser().GetLogin(),
-				BaseRef:             ghPR.GetBase().GetRef(),
-				HeadRef:             ghPR.GetHead().GetRef(),
-				HeadSHA:             ghPR.GetHead().GetSHA(),
-				Body:                ghPR.GetBody(),
-				CreatedAt:           ghPR.GetCreatedAt().Time,
-				UpdatedAt:           ghPR.GetUpdatedAt().Time,
-				HTMLURL:             ghPR.GetHTMLURL(),
-				CIStatus:            ciStatus,
-				CheckRuns:           checks,
-				Reviews:             reviews,
-				Comments:            comments,
-				DiffFiles:           files,
-				ReviewState:         reviewState,
-				IsReviewRequested:   github.IsReviewRequested(ghPR, m.currentUser),
-				HasWorktree:         hasWt,
-				WorktreePath:        wtPath,
+				Number:            int(ghPR.GetNumber()),
+				Title:             ghPR.GetTitle(),
+				Author:            ghPR.GetUser().GetLogin(),
+				BaseRef:           ghPR.GetBase().GetRef(),
+				HeadRef:           ghPR.GetHead().GetRef(),
+				HeadSHA:           ghPR.GetHead().GetSHA(),
+				Body:              ghPR.GetBody(),
+				CreatedAt:         ghPR.GetCreatedAt().Time,
+				UpdatedAt:         ghPR.GetUpdatedAt().Time,
+				HTMLURL:           ghPR.GetHTMLURL(),
+				CIStatus:          model.CIStatusUnknown,
+				IsReviewRequested: github.IsReviewRequested(ghPR, m.currentUser),
+				HasWorktree:       hasWt,
+				WorktreePath:      wtPath,
+				DetailLoaded:      false,
 			})
 		}
 		return fetchedMsg{prs: prs}
+	}
+}
+
+func (m AppModel) detailFetchCmd(pr model.PR) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		var (
+			reviews  []model.Review
+			checks   []model.CheckRun
+			ciStatus model.CIStatus
+			comments []model.Comment
+			files    []model.DiffFile
+		)
+		eg, ctx := errgroup.WithContext(ctx)
+		eg.Go(func() error {
+			var err error
+			reviews, err = github.FetchReviews(ctx, m.ghClient, m.repoOwner, m.repoRepo, pr.Number)
+			return err
+		})
+		eg.Go(func() error {
+			var err error
+			checks, ciStatus, err = github.FetchCheckRuns(ctx, m.ghClient, m.repoOwner, m.repoRepo, pr.HeadSHA)
+			return err
+		})
+		eg.Go(func() error {
+			var err error
+			comments, err = github.FetchComments(ctx, m.ghClient, m.repoOwner, m.repoRepo, pr.Number)
+			return err
+		})
+		eg.Go(func() error {
+			var err error
+			files, err = github.FetchDiff(ctx, m.ghClient, m.repoOwner, m.repoRepo, pr.Number)
+			return err
+		})
+		if err := eg.Wait(); err != nil {
+			return detailFetchedMsg{prNumber: pr.Number, err: err}
+		}
+		return detailFetchedMsg{
+			prNumber: pr.Number,
+			reviews:  reviews,
+			checks:   checks,
+			ciStatus: ciStatus,
+			comments: comments,
+			files:    files,
+		}
 	}
 }
 
@@ -142,6 +187,25 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.err = nil
 			m.allPRs = msg.prs
+			m = m.applyFilter()
+		}
+
+	case detailFetchedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			for i, pr := range m.allPRs {
+				if pr.Number == msg.prNumber {
+					m.allPRs[i].Reviews = msg.reviews
+					m.allPRs[i].CheckRuns = msg.checks
+					m.allPRs[i].CIStatus = msg.ciStatus
+					m.allPRs[i].Comments = msg.comments
+					m.allPRs[i].DiffFiles = msg.files
+					m.allPRs[i].DetailLoaded = true
+					m.allPRs[i].ReviewState = github.CalcReviewState(m.currentUser, msg.reviews, m.allPRs[i].UpdatedAt)
+					break
+				}
+			}
 			m = m.applyFilter()
 		}
 
@@ -189,6 +253,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if pr := m.prsTab.SelectedPR(); pr != nil {
 				m.detailTab = m.detailTab.SetPR(pr)
 				m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
+				if !pr.DetailLoaded {
+					return m, m.detailFetchCmd(*pr)
+				}
 			}
 		}
 	case model.TabDetail:
