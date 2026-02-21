@@ -115,7 +115,7 @@ func (m diffTabModel) Update(msg tea.Msg) (diffTabModel, tea.Cmd) {
 		if m.fileList.Index() != prev {
 			m = m.updateDiffView()
 		}
-		if key, ok := msg.(tea.KeyMsg); ok && key.String() == "tab" {
+		if key, ok := msg.(tea.KeyMsg); ok && key.String() == "enter" {
 			m.focusLeft = false
 		}
 	} else {
@@ -127,7 +127,7 @@ func (m diffTabModel) Update(msg tea.Msg) (diffTabModel, tea.Cmd) {
 			case "k":
 				m.diffView.ScrollUp(1)
 				return m, nil
-			case "tab":
+			case "enter":
 				m.focusLeft = true
 				return m, nil
 			}
