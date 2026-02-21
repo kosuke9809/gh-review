@@ -253,6 +253,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab == model.TabPRs {
 				return m, m.worktreeCmd()
 			}
+		case "D":
+			if m.activeTab == model.TabPRs {
+				return m, m.removeWorktreeCmd()
+			}
 		case "d":
 			if m.activeTab == model.TabPRs {
 				m.activeTab = model.TabDiff
@@ -307,6 +311,21 @@ func (m AppModel) worktreeCmd() tea.Cmd {
 			if err := git.CreateWorktree(repoRoot, prNum); err != nil {
 				return fetchedMsg{err: fmt.Errorf("worktree: %w", err)}
 			}
+		}
+		return tickMsg(time.Now())
+	}
+}
+
+func (m AppModel) removeWorktreeCmd() tea.Cmd {
+	pr := m.prsTab.SelectedPR()
+	if pr == nil || !pr.HasWorktree {
+		return nil
+	}
+	prNum := pr.Number
+	repoRoot := m.repoRoot
+	return func() tea.Msg {
+		if err := git.RemoveWorktree(repoRoot, prNum); err != nil {
+			return fetchedMsg{err: fmt.Errorf("remove worktree: %w", err)}
 		}
 		return tickMsg(time.Now())
 	}
