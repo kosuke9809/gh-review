@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -31,9 +32,20 @@ func colorDiff(patch string) string {
 	return strings.Join(lines, "\n")
 }
 
-type fileItem struct{ name string }
+type fileItem struct {
+	name      string
+	additions int
+	deletions int
+}
 
-func (f fileItem) Title() string       { return f.name }
+func (f fileItem) Title() string {
+	if f.additions == 0 && f.deletions == 0 {
+		return f.name
+	}
+	adds := lipgloss.NewStyle().Foreground(colorGreen).Render(fmt.Sprintf("+%d", f.additions))
+	dels := lipgloss.NewStyle().Foreground(colorRed).Render(fmt.Sprintf("-%d", f.deletions))
+	return fmt.Sprintf("%s %s/%s", f.name, adds, dels)
+}
 func (f fileItem) Description() string { return "" }
 func (f fileItem) FilterValue() string { return f.name }
 
@@ -73,7 +85,11 @@ func (m diffTabModel) SetFiles(files []model.DiffFile) diffTabModel {
 	m.files = files
 	items := make([]list.Item, len(files))
 	for i, f := range files {
-		items[i] = fileItem{name: f.Filename}
+		items[i] = fileItem{
+			name:      f.Filename,
+			additions: f.Additions,
+			deletions: f.Deletions,
+		}
 	}
 	m.fileList.SetItems(items)
 	if len(files) > 0 {
@@ -103,10 +119,20 @@ func (m diffTabModel) Update(msg tea.Msg) (diffTabModel, tea.Cmd) {
 			m.focusLeft = false
 		}
 	} else {
-		m.diffView, cmd = m.diffView.Update(msg)
-		if key, ok := msg.(tea.KeyMsg); ok && key.String() == "tab" {
-			m.focusLeft = true
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "j":
+				m.diffView.ScrollDown(1)
+				return m, nil
+			case "k":
+				m.diffView.ScrollUp(1)
+				return m, nil
+			case "tab":
+				m.focusLeft = true
+				return m, nil
+			}
 		}
+		m.diffView, cmd = m.diffView.Update(msg)
 	}
 	return m, cmd
 }
@@ -117,9 +143,11 @@ func (m diffTabModel) View() string {
 	leftBorder := styleBorder
 	rightBorder := styleBorder
 	if m.focusLeft {
-		leftBorder = leftBorder.BorderForeground(colorCyan)
+		leftBorder = leftBorder.BorderForeground(colorGreen)
+		m.fileList.Title = "▶ Files"
 	} else {
-		rightBorder = rightBorder.BorderForeground(colorCyan)
+		rightBorder = rightBorder.BorderForeground(colorGreen)
+		m.fileList.Title = "  Files"
 	}
 
 	left := leftBorder.Width(leftW).Render(m.fileList.View())
