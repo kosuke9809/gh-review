@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -12,20 +11,22 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Token obtains a GitHub token using `gh auth token`.
-func Token() (string, error) {
-	out, err := exec.Command("gh", "auth", "token").Output()
-	if err != nil {
-		return "", fmt.Errorf("gh auth token failed (is gh installed and authenticated?): %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 // NewClient creates an authenticated go-github client.
 func NewClient(token string) *gogithub.Client {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(context.Background(), ts)
 	return gogithub.NewClient(tc)
+}
+
+// NewClientForHost creates a GitHub client for github.com or a GHES host.
+func NewClientForHost(token, host string) (*gogithub.Client, error) {
+	client := NewClient(token)
+	if host == "" || strings.EqualFold(host, "github.com") {
+		return client, nil
+	}
+	baseURL := fmt.Sprintf("https://%s/api/v3/", host)
+	uploadURL := fmt.Sprintf("https://%s/api/uploads/", host)
+	return client.WithEnterpriseURLs(baseURL, uploadURL)
 }
 
 // CurrentUser returns the login of the authenticated user.
