@@ -119,4 +119,5 @@ type PR struct {
 	IsReviewRequested   bool
 	HasWorktree         bool
 	WorktreePath        string
+	DetailLoaded        bool // true after lazy detail fetch completes
 }
