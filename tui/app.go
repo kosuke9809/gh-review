@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -21,6 +22,20 @@ import (
 func Context() context.Context {
 	return context.Background()
 }
+type screen int
+
+const (
+	screenList   screen = iota
+	screenDetail
+)
+
+type detailSubTab int
+
+const (
+	subTabDetail detailSubTab = iota
+	subTabDiff
+)
+
 
 type fetchedMsg struct {
 	prs []model.PR
@@ -41,21 +56,23 @@ type tickMsg time.Time
 
 // AppModel is the root bubbletea model.
 type AppModel struct {
-	activeTab   model.Tab
-	filter      model.PRFilter
-	prsTab      prsTabModel
-	detailTab   detailTabModel
-	diffTab     diffTabModel
-	allPRs      []model.PR // all fetched PRs (unfiltered)
-	prs         []model.PR // filtered view
-	loading     bool
-	err         error
-	lastSync    time.Time
-	repoName    string
-	repoOwner   string
-	repoRepo    string
-	repoRoot    string
-	currentUser string
+	screen        screen
+	detailSubTab  detailSubTab
+	selectedPR    *model.PR
+	filter        model.PRFilter
+	prsTab        prsTabModel
+	detailTab     detailTabModel
+	diffTab       diffTabModel
+	allPRs        []model.PR
+	prs           []model.PR
+	loading       bool
+	err           error
+	lastSync      time.Time
+	repoName      string
+	repoOwner     string
+	repoRepo      string
+	repoRoot      string
+	currentUser   string
 	ghClient      *gogithub.Client
 	width         int
 	height        int
@@ -70,7 +87,7 @@ func New(owner, repo, repoRoot, currentUser string, client *gogithub.Client, wid
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colorGreen)
 	return AppModel{
-		activeTab:   model.TabPRs,
+		screen:      screenList,
 		prsTab:      newPRsTab(inner, height),
 		detailTab:   newDetailTab(inner, height),
 		diffTab:     newDiffTab(inner, height),
@@ -296,10 +313,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m AppModel) applyFilter() AppModel {
 	m.prs = model.FilterPRs(m.allPRs, m.filter, m.currentUser)
 	m.prsTab = m.prsTab.SetPRs(m.prs)
-	if pr := m.prsTab.SelectedPR(); pr != nil {
-		m.detailTab = m.detailTab.SetPR(pr)
-		m.diffTab = m.diffTab.SetFiles(pr.DiffFiles)
-	}
 	return m
 }
 
@@ -336,7 +349,10 @@ func (m AppModel) removeWorktreeCmd() tea.Cmd {
 }
 
 func openEditorCmd(path string) tea.Cmd {
-	editor := "code"
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
 	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
 		return nil
 	})

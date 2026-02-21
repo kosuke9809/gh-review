@@ -2,14 +2,6 @@ package model
 
 import "time"
 
-type Tab int
-
-const (
-	TabPRs Tab = iota
-	TabDetail
-	TabDiff
-)
-
 type PRFilter int
 
 const (
