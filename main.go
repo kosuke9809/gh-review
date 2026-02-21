@@ -6,9 +6,9 @@ import (
 	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/kosuke9809/gh-review/internal/github"
-	"github.com/kosuke9809/gh-review/internal/git"
-	"github.com/kosuke9809/gh-review/internal/tui"
+	"github.com/kosuke9809/gh-review/github"
+	"github.com/kosuke9809/gh-review/git"
+	"github.com/kosuke9809/gh-review/tui"
 	"golang.org/x/term"
 )
 

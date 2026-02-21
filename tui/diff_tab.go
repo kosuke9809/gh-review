@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 // ColorDiffLine applies color to a single diff line.

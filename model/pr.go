@@ -93,8 +93,10 @@ type Comment struct {
 }
 
 type DiffFile struct {
-	Filename string
-	Patch    string
+	Filename  string
+	Patch     string
+	Additions int
+	Deletions int
 }
 
 type PR struct {

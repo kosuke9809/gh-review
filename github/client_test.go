@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kosuke9809/gh-review/internal/github"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/github"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 func TestCalcReviewState(t *testing.T) {

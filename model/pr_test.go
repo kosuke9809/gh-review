@@ -3,7 +3,7 @@ package model_test
 import (
 	"testing"
 
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 func TestFilterPRs(t *testing.T) {

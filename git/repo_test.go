@@ -3,7 +3,7 @@ package git_test
 import (
 	"testing"
 
-	"github.com/kosuke9809/gh-review/internal/git"
+	"github.com/kosuke9809/gh-review/git"
 )
 
 func TestParseOwnerRepo(t *testing.T) {

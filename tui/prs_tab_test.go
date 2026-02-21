@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kosuke9809/gh-review/internal/model"
-	"github.com/kosuke9809/gh-review/internal/tui"
+	"github.com/kosuke9809/gh-review/model"
+	"github.com/kosuke9809/gh-review/tui"
 	"github.com/muesli/termenv"
 )
 

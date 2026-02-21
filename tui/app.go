@@ -9,9 +9,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	gogithub "github.com/google/go-github/v68/github"
-	"github.com/kosuke9809/gh-review/internal/git"
-	"github.com/kosuke9809/gh-review/internal/github"
-	"github.com/kosuke9809/gh-review/internal/model"
+	"github.com/kosuke9809/gh-review/git"
+	"github.com/kosuke9809/gh-review/github"
+	"github.com/kosuke9809/gh-review/model"
 )
 
 // Context returns a background context for use in main.go.
