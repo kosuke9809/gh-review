@@ -221,19 +221,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if pr.Number == m.selectedPR.Number {
 						pr := pr
 						m.selectedPR = &pr
+						m.loadingDetail = false
 						if !pr.DetailLoaded {
 							m.loadingDetail = true
 							return m, m.detailFetchCmd(pr)
 						}
+						break
 					}
 				}
 			}
 		}
 
 	case detailFetchedMsg:
-		m.loadingDetail = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.loadingDetail = false
 		} else {
 			for i, pr := range m.allPRs {
 				if pr.Number == msg.prNumber {
@@ -244,12 +246,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.allPRs[i].DiffFiles = msg.files
 					m.allPRs[i].DetailLoaded = true
 					m.allPRs[i].ReviewState = github.CalcReviewState(m.currentUser, msg.reviews, m.allPRs[i].UpdatedAt)
-					// Update selectedPR if this is the PR being viewed
+					// Only update UI and clear loading if this is the PR being viewed
 					if m.selectedPR != nil && m.selectedPR.Number == msg.prNumber {
 						updated := m.allPRs[i]
 						m.selectedPR = &updated
 						m.detailTab = m.detailTab.SetPR(m.selectedPR)
 						m.diffTab = m.diffTab.SetFiles(m.selectedPR.DiffFiles)
+						m.loadingDetail = false
 					}
 					break
 				}
