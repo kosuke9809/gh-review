@@ -397,10 +397,20 @@ func (m AppModel) View() string {
 }
 
 func (m AppModel) buildTopBorder() string {
-	title := fmt.Sprintf("[gh-review — %s]", m.repoName)
-	tabs := m.renderTabsStr()
-	filter := lipgloss.NewStyle().Foreground(colorYellow).Render("[f] " + m.filter.Label())
-	inner := "─" + title + "─" + tabs + "─" + filter
+	var inner string
+	if m.screen == screenList {
+		title := fmt.Sprintf("[gh-review — %s]", m.repoName)
+		filter := lipgloss.NewStyle().Foreground(colorYellow).Render("[f] " + m.filter.Label())
+		inner = "─" + title + "─" + filter
+	} else {
+		prTitle := ""
+		if m.selectedPR != nil {
+			prTitle = fmt.Sprintf(" — #%d %s", m.selectedPR.Number, m.selectedPR.Title)
+		}
+		title := fmt.Sprintf("[gh-review — %s%s]", m.repoName, prTitle)
+		subTabs := m.renderSubTabsStr()
+		inner = "─" + title + "─" + subTabs
+	}
 	innerW := lipgloss.Width(inner)
 	pad := m.width - 2 - innerW
 	if pad < 0 {
@@ -423,34 +433,27 @@ func (m AppModel) buildBottomBorder() string {
 	return lipgloss.NewStyle().Foreground(colorGreen).Render(line)
 }
 
-func (m AppModel) renderTabsStr() string {
-	tabs := []struct {
-		label  string
-		tabVal model.Tab
-	}{
-		{"1:PRs", model.TabPRs},
-		{"2:Detail", model.TabDetail},
-		{"3:Diff", model.TabDiff},
+func (m AppModel) renderSubTabsStr() string {
+	var detail, diff string
+	if m.detailSubTab == subTabDetail {
+		detail = styleTabActive.Render("Detail")
+		diff = styleTabInactive.Render("Diff")
+	} else {
+		detail = styleTabInactive.Render("Detail")
+		diff = styleTabActive.Render("Diff")
 	}
-	var parts []string
-	for _, t := range tabs {
-		if t.tabVal == m.activeTab {
-			parts = append(parts, styleTabActive.Render(t.label))
-		} else {
-			parts = append(parts, styleTabInactive.Render(t.label))
-		}
-	}
-	return strings.Join(parts, "")
+	return detail + diff
 }
 
 func (m AppModel) helpStr() string {
-	switch m.activeTab {
-	case model.TabDiff:
-		return "[tab]pane  [j/k]scroll  [f]filter  [r]efresh  [q]quit"
-	case model.TabPRs:
-		return "[Enter]create  [o]open  [D]delete  [d]iff  [f]filter  [r]efresh  [q]quit"
+	if m.screen == screenList {
+		return "[Enter]detail [w]worktree [o]open [D]delete [f]filter [r]efresh [q]quit"
+	}
+	switch m.detailSubTab {
+	case subTabDiff:
+		return "[tab]switch [enter]focus [j/k]scroll [Esc/b]back [q]quit"
 	default:
-		return "[j/k]scroll  [f]filter  [r]efresh  [q]quit"
+		return "[tab]switch [j/k]scroll [Esc/b]back [q]quit"
 	}
 }
 
@@ -476,26 +479,21 @@ func (m AppModel) renderBody() string {
 			Align(lipgloss.Center, lipgloss.Center).
 			Render(m.spinner.View() + " Loading PRs...")
 	}
-	switch m.activeTab {
-	case model.TabPRs:
+	if m.screen == screenList {
 		return m.prsTab.View()
-	case model.TabDetail:
-		if m.loadingDetail {
-			return lipgloss.NewStyle().
-				Width(m.width - 2).
-				Height(m.height - 4).
-				Align(lipgloss.Center, lipgloss.Center).
-				Render(m.spinner.View() + " Loading details...")
-		}
+	}
+	// screenDetail
+	if m.loadingDetail {
+		return lipgloss.NewStyle().
+			Width(m.width - 2).
+			Height(m.height - 4).
+			Align(lipgloss.Center, lipgloss.Center).
+			Render(m.spinner.View() + " Loading details...")
+	}
+	switch m.detailSubTab {
+	case subTabDetail:
 		return m.detailTab.View()
-	case model.TabDiff:
-		if m.loadingDetail {
-			return lipgloss.NewStyle().
-				Width(m.width - 2).
-				Height(m.height - 4).
-				Align(lipgloss.Center, lipgloss.Center).
-				Render(m.spinner.View() + " Loading diff...")
-		}
+	case subTabDiff:
 		return m.diffTab.View()
 	}
 	return ""
