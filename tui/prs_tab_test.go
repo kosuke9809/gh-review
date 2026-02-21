@@ -96,3 +96,19 @@ func TestFormatPRRow_WorktreeIcon(t *testing.T) {
 		t.Error("expected ⎇ worktree icon in PR row")
 	}
 }
+
+func TestRenderDetail_WithBody(t *testing.T) {
+	pr := model.PR{
+		Number: 5,
+		Title:  "PR with body",
+		Author: "bob",
+		Body:   "This is the PR description.",
+	}
+	content := tui.RenderDetailContent(pr)
+	if !strings.Contains(content, "Description") {
+		t.Error("expected Description section in detail content")
+	}
+	if !strings.Contains(content, "This is the PR description.") {
+		t.Error("expected body text in detail content")
+	}
+}
