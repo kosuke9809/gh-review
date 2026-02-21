@@ -117,9 +117,9 @@ func (m diffTabModel) View() string {
 	leftBorder := styleBorder
 	rightBorder := styleBorder
 	if m.focusLeft {
-		leftBorder = leftBorder.BorderForeground(colorBlue)
+		leftBorder = leftBorder.BorderForeground(colorCyan)
 	} else {
-		rightBorder = rightBorder.BorderForeground(colorBlue)
+		rightBorder = rightBorder.BorderForeground(colorCyan)
 	}
 
 	left := leftBorder.Width(leftW).Render(m.fileList.View())

@@ -1,19 +1,22 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/kosuke9809/gh-review/model"
+)
 
 var (
 	colorGreen  = lipgloss.Color("2")
+	colorCyan   = lipgloss.Color("6")
 	colorRed    = lipgloss.Color("1")
 	colorYellow = lipgloss.Color("3")
-	colorBlue   = lipgloss.Color("4")
 	colorGray   = lipgloss.Color("8")
 	colorWhite  = lipgloss.Color("15")
 
 	styleTabActive = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorWhite).
-			Background(colorBlue).
+			Background(colorGreen).
 			Padding(0, 1)
 
 	styleTabInactive = lipgloss.NewStyle().
@@ -23,7 +26,7 @@ var (
 	styleStatusBar = lipgloss.NewStyle().
 			Foreground(colorGray)
 
-	styleBadgeNew  = lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
+	styleBadgeNew  = lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
 	styleBadgeUpd  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 	styleBadgeDone = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
 	styleBadgeChg  = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
@@ -36,15 +39,20 @@ var (
 
 	styleDiffAdd = lipgloss.NewStyle().Foreground(colorGreen)
 	styleDiffDel = lipgloss.NewStyle().Foreground(colorRed)
-	styleDiffHdr = lipgloss.NewStyle().Foreground(colorBlue)
+	styleDiffHdr = lipgloss.NewStyle().Foreground(colorCyan)
 
 	styleBorder = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(colorGray)
+			BorderForeground(colorGreen)
 
 	styleSelected = lipgloss.NewStyle().
 			Background(lipgloss.Color("236")).
 			Bold(true)
+
+	styleRowNew  = lipgloss.NewStyle().Foreground(colorCyan)
+	styleRowUpd  = lipgloss.NewStyle().Foreground(colorYellow)
+	styleRowDone = lipgloss.NewStyle().Foreground(colorGray)
+	styleRowChg  = lipgloss.NewStyle().Foreground(colorRed)
 )
 
 func badgeForState(state string) string {
@@ -71,4 +79,18 @@ func ciIconStr(s string) string {
 		return styleCIPending.Render("●")
 	}
 	return "?"
+}
+
+func rowStyleForState(state model.ReviewState) lipgloss.Style {
+	switch state {
+	case model.ReviewStateNew:
+		return styleRowNew
+	case model.ReviewStateUpd:
+		return styleRowUpd
+	case model.ReviewStateDone:
+		return styleRowDone
+	case model.ReviewStateChg:
+		return styleRowChg
+	}
+	return lipgloss.NewStyle()
 }
