@@ -354,7 +354,7 @@ func (m AppModel) renderStatusBar() string {
 		syncStr = "Syncing..."
 	}
 	if m.err != nil {
-		syncStr = styleStatusBar.Copy().Foreground(colorRed).Render("Error: " + m.err.Error())
+		syncStr = styleStatusBar.Foreground(colorRed).Render("Error: " + m.err.Error())
 	}
 	help := "[Enter]worktree  [d]iff  [o]open  [f]filter  [r]efresh  [q]quit"
 	rightW := len(syncStr) + 1
